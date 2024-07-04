@@ -1,4 +1,11 @@
-const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, BASE } = process.env;
+import fetch from "node-fetch";
+const {
+  PAYPAL_CLIENT_ID,
+  PAYPAL_CLIENT_SECRET,
+  STRAPICMS_ENDPOINT,
+  STRAPICMS_TOKEN,
+  BASE,
+} = process.env;
 
 const generateAccessToken = async () => {
   try {
@@ -23,4 +30,37 @@ const generateAccessToken = async () => {
   }
 };
 
-exports.generateAccessToken = generateAccessToken;
+async function fetchOrder(orderId) {
+  try {
+    const response = await fetch(
+      `${STRAPICMS_ENDPOINT}/api/orders/${orderId}?populate=products`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${STRAPICMS_TOKEN}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return { error: "cannot fetch product" };
+    }
+    const order = await response.json();
+
+    return order.data.attributes.products.data.map((product) => {
+      product = { id: product.id, ...product.attributes };
+      return {
+        reference_id: product.id,
+        amount: {
+          currency_code: "USD",
+          value: product.price,
+        },
+      };
+    });
+  } catch (error) {
+    return { error: "cannot fetch product" };
+  }
+}
+
+export { generateAccessToken, fetchOrder };

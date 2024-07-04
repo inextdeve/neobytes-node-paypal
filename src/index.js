@@ -1,12 +1,12 @@
 import express from "express";
 import fetch from "node-fetch";
 import "dotenv/config";
-import path from "path";
 import cors from "cors";
+import { fetchOrder, generateAccessToken } from "./utils/helpers.js";
 
-const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PORT = 9900 } = process.env;
-// const base = "https://api-m.sandbox.paypal.com";
-const base = "https://api-m.paypal.com";
+const { PORT = 9900 } = process.env;
+const base = "https://api-m.sandbox.paypal.com";
+// const base = "https://api-m.paypal.com";
 const app = express();
 
 // host static files
@@ -21,52 +21,27 @@ app.use(cors());
  * Generate an OAuth 2.0 access token for authenticating with PayPal REST APIs.
  * @see https://developer.paypal.com/api/rest/authentication/
  */
-const generateAccessToken = async () => {
-  try {
-    if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
-      throw new Error("MISSING_API_CREDENTIALS");
-    }
-    const auth = Buffer.from(
-      PAYPAL_CLIENT_ID + ":" + PAYPAL_CLIENT_SECRET
-    ).toString("base64");
-    const response = await fetch(`${base}/v1/oauth2/token`, {
-      method: "POST",
-      body: "grant_type=client_credentials",
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
-    });
-
-    const data = await response.json();
-    return data.access_token;
-  } catch (error) {
-    console.error("Failed to generate Access Token:", error);
-  }
-};
 
 /**
  * Create an order to start the transaction.
  * @see https://developer.paypal.com/docs/api/orders/v2/#orders_create
  */
-const createOrder = async (cart) => {
+const createOrder = async (orderId) => {
   // use the cart information passed from the front-end to calculate the purchase unit details
   console.log(
     "shopping cart information passed from the frontend createOrder() callback:",
-    cart
+    orderId
   );
+
+  const order = await fetchOrder(orderId);
+
+  console.log(order);
 
   const accessToken = await generateAccessToken();
   const url = `${base}/v2/checkout/orders`;
   const payload = {
     intent: "CAPTURE",
-    purchase_units: [
-      {
-        amount: {
-          currency_code: "USD",
-          value: "5.00",
-        },
-      },
-    ],
+    purchase_units: order,
   };
 
   const response = await fetch(url, {
@@ -126,8 +101,8 @@ async function handleResponse(response) {
 app.post("/api/orders", async (req, res) => {
   try {
     // use the cart information passed from the front-end to calculate the order amount detals
-    const { cart } = req.body;
-    const { jsonResponse, httpStatusCode } = await createOrder(cart);
+    const { orderId } = req.body;
+    const { jsonResponse, httpStatusCode } = await createOrder(orderId);
     res.status(httpStatusCode).json(jsonResponse);
   } catch (error) {
     console.error("Failed to create order:", error);
